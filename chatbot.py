@@ -12,8 +12,10 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+pinecone_api_key = os.getenv("PINECONE_API_KEY")
+
 # Initialize Pinecone client
-pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+pc = Pinecone(api_key=pinecone_api_key)
 
 index_name = os.getenv("PINECONE_INDEX")
 
@@ -46,6 +48,18 @@ def ensure_index_exists():
         st.error(f"Error with Pinecone index: {str(e)}")
         return None
 
+def check_index_has_data():
+    """Check if the Pinecone index contains any records"""
+    try:
+        index = pc.Index(index_name)
+        # Get the index statistics
+        stats = index.describe_index_stats()
+        # Check if there are any vectors in the index
+        return stats.total_vector_count > 0
+    except Exception as e:
+        st.error(f"Error checking index data: {str(e)}")
+        return False
+
 def process_pdf(file_path):
     """Process PDF file and return chunks"""
     try:
@@ -75,22 +89,10 @@ def get_qa_chain(vectorstore):
         return_source_documents=True
     )
 
-def main():
-    st.title("PDF Document Processor and Q&A")
-    st.write("Upload a PDF file to process and ask questions about it")
-    
-    # Initialize session state for chat history
-    if "chat_history" not in st.session_state:
-        st.session_state.chat_history = []
-    
-    # Check for required environment variables
-    if not os.getenv("OPENAI_API_KEY"):
-        st.error("Please set your OPENAI_API_KEY in the .env file")
-        return
-    
-    if not os.getenv("PINECONE_API_KEY"):
-        st.error("Please set your PINECONE_API_KEY in the .env file")
-        return
+def upload_document():
+    """Handle document upload and processing"""
+    st.subheader("Upload New Document")
+    st.write("Upload a PDF file to process and add to the knowledge base")
     
     # File uploader
     uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
@@ -126,39 +128,13 @@ def main():
                         documents=chunks,
                         embedding=embeddings,
                         index_name=index_name,
-                        pinecone_api_key=os.getenv("PINECONE_API_KEY")
+                        pinecone_api_key=pinecone_api_key
                     )
-                    
-                    # Create QA chain
-                    qa_chain = get_qa_chain(vectorstore)
-                    
                     st.success(f"Successfully processed {len(chunks)} chunks and stored in Pinecone!")
-                    st.info("Your documents are now ready for querying!")
+                    st.info("Your document is now ready for querying!")
                     
-                    # Add question input
-                    st.subheader("Ask questions about your PDF")
-                    question = st.text_area("Enter your question:", height=100)
-                    
-                    if question:
-                        with st.spinner("Thinking..."):
-                            # Get answer
-                            result = qa_chain({"question": question, "chat_history": st.session_state.chat_history})
-                            
-                            # Update chat history
-                            st.session_state.chat_history.append((question, result["answer"]))
-                            
-                            # Display answer
-                            st.subheader("Answer:")
-                            st.write(result["answer"])
-                            
-                            # Display source documents
-                            with st.expander("View Source Documents"):
-                                for doc in result["source_documents"]:
-                                    st.write("---")
-                                    st.write(doc.page_content)
-                                    
                 except Exception as e2:
-                    st.warning(f"Method 2 failed: {e2}")
+                    st.warning(f"Failed to store embeddings: {e2}")
 
         except Exception as e:
             st.error(f"An error occurred: {str(e)}")
@@ -168,6 +144,88 @@ def main():
             # Clean up temporary file
             if os.path.exists(temp_file_path):
                 os.remove(temp_file_path)
+
+def chat_interface():
+    """Handle the chat interface"""
+    st.subheader("Ask Questions")
+    st.write("Ask questions about your uploaded documents")
+    
+    # Initialize session state for chat history
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
+    
+    # Check if index has data
+    if not check_index_has_data():
+        st.warning("No documents have been uploaded yet. Please upload a document first.")
+        return
+    
+    # Initialize vectorstore
+    try:
+        vectorstore = PineconeVectorStore.from_existing_index(
+            index_name=index_name,
+            embedding=embeddings
+        )
+        
+        # Create QA chain
+        qa_chain = get_qa_chain(vectorstore)
+        
+        # Display chat history
+        for q, a in st.session_state.chat_history:
+            st.markdown(f"**Q:** {q}")
+            st.markdown(f"**A:** {a}")
+            st.markdown("---")
+        
+        # Create a form for the input and button
+        with st.form(key="question_form"):
+            # Create a row for the input and button
+            col1, col2 = st.columns([5, 1])
+            
+            with col1:
+                # Add question input
+                question = st.text_input("", key="question_input", placeholder="Type your question here...")
+            
+            with col2:
+                # Add submit button
+                submit_button = st.form_submit_button("Send")
+        
+        # Process the question when the form is submitted
+        if submit_button and question:
+            with st.spinner("Thinking..."):
+                # Get answer
+                result = qa_chain({"question": question, "chat_history": st.session_state.chat_history})
+                
+                # Update chat history
+                st.session_state.chat_history.append((question, result["answer"]))
+                
+                # Clear the input after sending
+                st.session_state.question_input = ""
+                
+                # Rerun to update the chat history display
+                st.rerun()
+    
+    except Exception as e:
+        st.error(f"Error initializing vector store: {str(e)}")
+
+def main():
+    st.title("Document Q&A System")
+    
+    # Check for required environment variables
+    if not os.getenv("OPENAI_API_KEY"):
+        st.error("Please set your OPENAI_API_KEY in the .env file")
+        return
+    
+    if not pinecone_api_key:
+        st.error("Please set your PINECONE_API_KEY in the .env file")
+        return
+    
+    # Create tabs
+    tab1, tab2 = st.tabs(["Ask Questions", "Upload Document"])
+    
+    with tab1:
+        chat_interface()
+    
+    with tab2:
+        upload_document()
 
 if __name__ == "__main__":
     main()
