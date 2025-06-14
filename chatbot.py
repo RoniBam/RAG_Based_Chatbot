@@ -1,91 +1,130 @@
 import streamlit as st
-from PyPDF2 import PdfReader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_community.embeddings.spacy_embeddings import SpacyEmbeddings
-from langchain_community.vectorstores import FAISS
-from langchain.tools.retriever import create_retriever_tool
-from dotenv import load_dotenv
-from langchain_openai import ChatOpenAI
-from langchain.agents import AgentExecutor, create_tool_calling_agent
-
 import os
+from langchain_community.document_loaders import PyPDFLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_openai import OpenAIEmbeddings
+from langchain_pinecone import PineconeVectorStore
+from pinecone import Pinecone, ServerlessSpec
+from dotenv import load_dotenv
 
-os.environ["KPM_DUPLICATE_LIB_OK"] = "TRUE"
-
+# Load environment variables
 load_dotenv()
 
-api_key = os.getenv("OPENAI_API_KEY")
+# Initialize Pinecone client
+pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
 
+index_name = os.getenv("PINECONE_INDEX")
 
-def read_pdf(pdf_doc):
-    text = ""
-    for pdf in pdf_doc:
-        pdf_reader = PdfReader(pdf)
-        for page in pdf_reader.pages:
-            text += page.extract_text()
-    return text
+# Initialize OpenAI embeddings
+embeddings = OpenAIEmbeddings()
 
+def ensure_index_exists():
+    """Ensure the Pinecone index exists, create if it doesn't"""
+    try:
+        # Check if index already exists
+        if index_name not in pc.list_indexes().names():
+            # Create index if it doesn't exist
+            st.write(f"Creating index: {index_name}")
+            pc.create_index(
+                name=index_name,
+                dimension=1536,  # OpenAI embeddings dimension
+                metric="cosine",
+                spec=ServerlessSpec(
+                    cloud="aws",
+                    region="us-east-1"  # Change to your preferred region
+                )
+            )
+            st.info(f"Created new Pinecone index: {index_name}")
+        
+        return pc.Index(index_name)
+    except Exception as e:
+        st.error(f"Error with Pinecone index: {str(e)}")
+        return None
 
-def get_chunks(text):
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-    chunks = text_splitter.split_text(text)
-    return chunks
-
-
-#to do - change the vector to cloud DB so it will not be stored locally
-embeddings = SpacyEmbeddings(model_name="en_core_web_sm")
-
-
-def vector_store(text_chunks):
-    vector_store1 = FAISS.from_texts(text_chunks, embedding=embeddings)
-    vector_store1.save_local("faiss_db")
-
-
-def get_conversational_chain(tools, ques):
-    llm = ChatOpenAI(model_name="gpt-3.5-turbo", temperature=0, api_key=api_key)
-    prompt = ChatPromptTemplate.from_messages([
-        ("system",
-        """You are a helpful assistant. Answer the question as defatild as possible from the provided context, make sure to provide all the details
-        , if the answer is not in the provided context just say "answer is not available", don't provide the wrong answer""",
-         ),
-        ("placeholder", "{chat_history}"),
-        ("human", "{input}"),
-        ("placeholder", "{agent_scratchpad}"),
-    ])
-    tool = [tools]
-    agent = create_tool_calling_agent(llm, tool, prompt)
-    agent_executor = AgentExecutor(agent=agent,tools=tool,verbose=True)
-    response = agent_executor.invoke({"input": ques})
-    print(response)
-    st.write("Reply: ", response['output'])
-
-
-def user_input(user_question):
-    new_db = FAISS.load_local("faiss_db",embeddings,allow_dangerous_deserialization=True)
-    retriever = new_db.as_retriever()
-    retrieval_chain = create_retriever_tool(retriever, "pdf_extractor", "This tool will give answers from a PDF uploaded by the user")
-    get_conversational_chain(retrieval_chain,user_question)
-
+def process_pdf(file_path):
+    """Process PDF file and return chunks"""
+    try:
+        # Load PDF
+        loader = PyPDFLoader(file_path)
+        pages = loader.load()
+        
+        if not pages:
+            raise ValueError("No content found in PDF")
+        
+        # Split text into chunks
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1000,
+            chunk_overlap=200,
+            length_function=len
+        )
+        chunks = text_splitter.split_documents(pages)
+        return chunks
+    except Exception as e:
+        raise Exception(f"Error processing PDF: {str(e)}")
 
 def main():
-    st.set_page_config("Chat PDF")
-    st.header("RAG based Chat with PDF")
-    user_question = st.text_input("Ask a Question from the PDF files")
-    if user_question:
-        user_input(user_question)
-    with st.sidebar:
-        pdf_doc = st.file_uploader("Upload your PDF files and click on the Submit & Process Button", accept_multiple_files=True)
-        if st.button("Submit & process"):
-            with st.spinner("Processing..."):
-                raw_text = read_pdf(pdf_doc)
-                text_chunks = get_chunks(raw_text)
-                vector_store(text_chunks)
-                st.success("Done")
+    st.title("PDF Document Processor")
+    st.write("Upload a PDF file to process")
+    
+    # Check for required environment variables
+    if not os.getenv("OPENAI_API_KEY"):
+        st.error("Please set your OPENAI_API_KEY in the .env file")
+        return
+    
+    if not os.getenv("PINECONE_API_KEY"):
+        st.error("Please set your PINECONE_API_KEY in the .env file")
+        return
+    
+    # File uploader
+    uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
+    
+    if uploaded_file is not None:
+        # Check file size
+        file_size = uploaded_file.size / (1024 * 1024)  # Convert to MB
+        if file_size > 200:
+            st.error("File size exceeds 200 MB limit")
+            return
+        
+        # Save uploaded file temporarily
+        temp_file_path = f"temp_{uploaded_file.name}"
+        with open(temp_file_path, "wb") as f:
+            f.write(uploaded_file.getvalue())
+        
+        try:
+            with st.spinner("Processing PDF..."):
+                # Process PDF
+                chunks = process_pdf(temp_file_path)
+                st.info(f"Extracted {len(chunks)} chunks from PDF")
+                
+            with st.spinner("Connecting..."):
+                # Ensure index exists
+                index = ensure_index_exists()
+                if index is None:
+                    st.error("Index is None")
+                    return
+                
+            with st.spinner("Storing embeddings..."):
+                try:
+                    vectorstore = PineconeVectorStore.from_documents(
+                        documents=chunks,
+                        embedding=embeddings,
+                        index_name=index_name,
+                        pinecone_api_key=os.getenv("PINECONE_API_KEY")
+                    )
+                except Exception as e2:
+                    st.warning(f"Method 2 failed: {e2}")
+
+                st.success(f"Successfully processed {len(chunks)} chunks and stored in Pinecone!")
+                st.info("Your documents are now ready for querying!")
+                
+        except Exception as e:
+            st.error(f"An error occurred: {str(e)}")
+            st.error("Please check your API keys and try again.")
+        
+        finally:
+            # Clean up temporary file
+            if os.path.exists(temp_file_path):
+                os.remove(temp_file_path)
 
 if __name__ == "__main__":
     main()
-
-
-
-
