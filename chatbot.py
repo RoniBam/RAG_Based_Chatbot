@@ -4,6 +4,8 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
 from langchain_pinecone import PineconeVectorStore
+from langchain_openai import ChatOpenAI
+from langchain.chains import ConversationalRetrievalChain
 from pinecone import Pinecone, ServerlessSpec
 from dotenv import load_dotenv
 
@@ -17,6 +19,9 @@ index_name = os.getenv("PINECONE_INDEX")
 
 # Initialize OpenAI embeddings
 embeddings = OpenAIEmbeddings()
+
+# Initialize chat model
+chat_model = ChatOpenAI(temperature=0)
 
 def ensure_index_exists():
     """Ensure the Pinecone index exists, create if it doesn't"""
@@ -62,9 +67,21 @@ def process_pdf(file_path):
     except Exception as e:
         raise Exception(f"Error processing PDF: {str(e)}")
 
+def get_qa_chain(vectorstore):
+    """Create a question-answering chain"""
+    return ConversationalRetrievalChain.from_llm(
+        llm=chat_model,
+        retriever=vectorstore.as_retriever(),
+        return_source_documents=True
+    )
+
 def main():
-    st.title("PDF Document Processor")
-    st.write("Upload a PDF file to process")
+    st.title("PDF Document Processor and Q&A")
+    st.write("Upload a PDF file to process and ask questions about it")
+    
+    # Initialize session state for chat history
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
     
     # Check for required environment variables
     if not os.getenv("OPENAI_API_KEY"):
@@ -111,12 +128,38 @@ def main():
                         index_name=index_name,
                         pinecone_api_key=os.getenv("PINECONE_API_KEY")
                     )
+                    
+                    # Create QA chain
+                    qa_chain = get_qa_chain(vectorstore)
+                    
+                    st.success(f"Successfully processed {len(chunks)} chunks and stored in Pinecone!")
+                    st.info("Your documents are now ready for querying!")
+                    
+                    # Add question input
+                    st.subheader("Ask questions about your PDF")
+                    question = st.text_area("Enter your question:", height=100)
+                    
+                    if question:
+                        with st.spinner("Thinking..."):
+                            # Get answer
+                            result = qa_chain({"question": question, "chat_history": st.session_state.chat_history})
+                            
+                            # Update chat history
+                            st.session_state.chat_history.append((question, result["answer"]))
+                            
+                            # Display answer
+                            st.subheader("Answer:")
+                            st.write(result["answer"])
+                            
+                            # Display source documents
+                            with st.expander("View Source Documents"):
+                                for doc in result["source_documents"]:
+                                    st.write("---")
+                                    st.write(doc.page_content)
+                                    
                 except Exception as e2:
                     st.warning(f"Method 2 failed: {e2}")
 
-                st.success(f"Successfully processed {len(chunks)} chunks and stored in Pinecone!")
-                st.info("Your documents are now ready for querying!")
-                
         except Exception as e:
             st.error(f"An error occurred: {str(e)}")
             st.error("Please check your API keys and try again.")
