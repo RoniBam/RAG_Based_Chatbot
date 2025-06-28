@@ -25,16 +25,40 @@ class ChatInterface:
             st.error(f"Error checking documents: {str(e)}")
             return
         
-        # Initialize vectorstore
+        # Get available files
         try:
-            vectorstore = self.vector_store_manager.get_vectorstore()
-            qa_chain = self.qa_chain.create_qa_chain(vectorstore)
+            available_files = self.vector_store_manager.get_available_files()
             
-            # Display chat history
-            for q, a in st.session_state.chat_history:
-                st.markdown(f"**Q:** {q}")
-                st.markdown(f"**A:** {a}")
-                st.markdown("---")
+            if not available_files:
+                st.warning("No documents found in the database.")
+                return
+            
+            # File selection with no default value
+            st.write("**Select a document to query:**")
+            selected_file = st.selectbox(
+                "Choose a document:",
+                options=[""] + available_files,  # Add empty option at the beginning
+                key="file_selector",
+                help="Select the document you want to ask questions about",
+                placeholder="Select a document..."
+            )
+            
+            # Check if a file is selected
+            if not selected_file:
+                st.error("⚠️ Please select a document before asking questions.")
+                return
+            
+            # Display selected file
+            st.success(f"Currently querying: **{selected_file}**")
+            
+        except Exception as e:
+            st.error(f"Error getting available files: {str(e)}")
+            return
+        
+        # Initialize vectorstore with file filter
+        try:
+            vectorstore = self.vector_store_manager.get_vectorstore(filename_filter=selected_file)
+            qa_chain = self.qa_chain.create_qa_chain(vectorstore)
             
             # Create a container for the input and button
             input_container = st.container()
@@ -54,7 +78,7 @@ class ChatInterface:
                 
                 with col2:
                     # Add send button with proper alignment
-                    #st.markdown("<div style='padding-top: 5px;'>", unsafe_allow_html=True)
+                    st.markdown("<div style='padding-top: 20px;'>", unsafe_allow_html=True)
                     send_button = st.button("Send", use_container_width=True)
                     st.markdown("</div>", unsafe_allow_html=True)
             
@@ -65,6 +89,15 @@ class ChatInterface:
                     st.session_state.chat_history.append((question, result["answer"]))
                     st.session_state.question_input = ""
                     st.rerun()
+            
+            # Display chat history AFTER the input section
+            if st.session_state.chat_history:
+                st.write("---")
+                st.write("**Previous Questions & Answers:**")
+                for q, a in st.session_state.chat_history:
+                    st.markdown(f"**Q:** {q}")
+                    st.markdown(f"**A:** {a}")
+                    st.markdown("---")
         
         except Exception as e:
             st.error(f"Error initializing chat: {str(e)}")

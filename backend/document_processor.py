@@ -1,5 +1,6 @@
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+from datetime import datetime
 from .config import *
 
 class DocumentProcessor:
@@ -10,8 +11,8 @@ class DocumentProcessor:
             length_function=len
         )
     
-    def process_pdf(self, file_path):
-        """Process PDF file and return chunks"""
+    def process_pdf(self, file_path, filename):
+        """Process PDF file and return chunks with metadata"""
         try:
             # Load PDF
             loader = PyPDFLoader(file_path)
@@ -22,6 +23,13 @@ class DocumentProcessor:
             
             # Split text into chunks
             chunks = self.text_splitter.split_documents(pages)
+            
+            # Add metadata to each chunk
+            upload_time = datetime.now().isoformat()
+            for chunk in chunks:
+                chunk.metadata[METADATA_FILENAME_KEY] = filename
+                chunk.metadata[METADATA_UPLOAD_TIME_KEY] = upload_time
+            
             return chunks
         except Exception as e:
             raise Exception(f"Error processing PDF: {str(e)}")

@@ -28,7 +28,7 @@ class UploadInterface:
                 
                 try:
                     with st.spinner("Processing PDF..."):
-                        chunks = self.document_processor.process_pdf(temp_file_path)
+                        chunks = self.document_processor.process_pdf(temp_file_path, uploaded_file.name)
                         st.info(f"Extracted {len(chunks)} chunks from PDF")
                     
                     with st.spinner("Connecting..."):
@@ -37,7 +37,7 @@ class UploadInterface:
                     with st.spinner("Storing embeddings..."):
                         self.vector_store_manager.store_documents(chunks)
                         st.success(f"Successfully processed {len(chunks)} chunks and stored in Pinecone!")
-                        st.info("Your document is now ready for querying!")
+                        st.info(f"Document '{uploaded_file.name}' is now ready for querying!")
                 
                 except Exception as e:
                     st.error(f"An error occurred: {str(e)}")

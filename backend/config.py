@@ -22,3 +22,7 @@ MAX_FILE_SIZE_MB = 200
 
 # Model settings
 TEMPERATURE = 0
+
+# File tracking settings
+METADATA_FILENAME_KEY = "filename"
+METADATA_UPLOAD_TIME_KEY = "upload_time"
