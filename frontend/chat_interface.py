@@ -16,6 +16,12 @@ class ChatInterface:
         if "chat_history" not in st.session_state:
             st.session_state.chat_history = []
         
+        # Initialize session state for current answer
+        if "current_answer" not in st.session_state:
+            st.session_state.current_answer = None
+        if "current_question" not in st.session_state:
+            st.session_state.current_question = None
+        
         # Check if index has data
         try:
             if not self.vector_store_manager.check_index_has_data():
@@ -47,9 +53,6 @@ class ChatInterface:
             if not selected_file:
                 st.error("⚠️ Please select a document before asking questions.")
                 return
-            
-            # Display selected file
-            st.success(f"Currently querying: **{selected_file}**")
             
         except Exception as e:
             st.error(f"Error getting available files: {str(e)}")
@@ -87,17 +90,23 @@ class ChatInterface:
                 with st.spinner("Thinking..."):
                     result = qa_chain({"question": question, "chat_history": st.session_state.chat_history})
                     st.session_state.chat_history.append((question, result["answer"]))
-                    st.session_state.question_input = ""
+                    # Store current question and answer for display
+                    st.session_state.current_question = question
+                    st.session_state.current_answer = result["answer"]
                     st.rerun()
             
-            # Display chat history AFTER the input section
-            if st.session_state.chat_history:
-                st.write("---")
-                st.write("**Previous Questions & Answers:**")
-                for q, a in st.session_state.chat_history:
-                    st.markdown(f"**Q:** {q}")
-                    st.markdown(f"**A:** {a}")
-                    st.markdown("---")
+            # Display only the current answer
+            if st.session_state.current_answer:
+                st.markdown(st.session_state.current_answer)
+                
+                # Show chat history expander only if there are more than one conversation
+                if len(st.session_state.chat_history) > 1:
+                    with st.expander(f"View Chat History ({len(st.session_state.chat_history)} conversations)"):
+                        for i, (q, a) in enumerate(st.session_state.chat_history):
+                            st.markdown(f"**Q{i+1}:** {q}")
+                            st.markdown(f"**A{i+1}:** {a}")
+                            if i < len(st.session_state.chat_history) - 1:
+                                st.markdown("---")
         
         except Exception as e:
             st.error(f"Error initializing chat: {str(e)}")

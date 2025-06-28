@@ -19,9 +19,6 @@ class AuthInterface:
         
         with col2:
             with st.container():
-                st.markdown("""
-                <div style='background-color: #f0f2f6; padding: 2rem; border-radius: 10px; border: 1px solid #ddd;'>
-                """, unsafe_allow_html=True)
                 
                 st.subheader("Login")
                 
@@ -32,31 +29,31 @@ class AuthInterface:
                     # Add some spacing
                     st.markdown("<br>", unsafe_allow_html=True)
                     
-                    login_button = st.form_submit_button("Login", use_container_width=True, type="primary")
-                    
-                    # Add some spacing
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    
-                    switch_to_signup = st.form_submit_button("Create New Account", use_container_width=True)
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        login_button = st.form_submit_button("Login", use_container_width=True, type="primary")
+                    with col2:
+                        switch_to_signup = st.form_submit_button("Sign up", use_container_width=True)
                 
                 st.markdown("</div>", unsafe_allow_html=True)
                 
                 # Handle form submissions
-                if 'login_form' in st.session_state:
-                    if st.session_state.get('login_form', False):
-                        if username and password:
-                            success, message, user_data = self.auth_manager.login_user(username, password)
-                            if success:
-                                st.session_state.authenticated = True
-                                st.session_state.user_data = user_data
-                                st.success(message)
-                                st.rerun()
-                            else:
-                                st.error(message)
+                if login_button:
+                    if username and password:
+                        success, message, user_data = self.auth_manager.login_user(username, password)
+                        if success:
+                            st.session_state.authenticated = True
+                            st.session_state.user_data = user_data
+                            st.session_state.current_page = "main"
+                            st.success(message)
+                            st.rerun()
                         else:
-                            st.error("Please fill in all fields")
+                            st.error(message)
+                    else:
+                        st.error("Please fill in all fields")
                 
-                if 'login_form' in st.session_state and st.session_state.get('switch_to_signup', False):
+                # Handle switching to signup - this should happen when the button is clicked
+                if switch_to_signup:
                     st.session_state.auth_mode = "signup"
                     st.rerun()
     
@@ -89,33 +86,34 @@ class AuthInterface:
                     # Add some spacing
                     st.markdown("<br>", unsafe_allow_html=True)
                     
-                    signup_button = st.form_submit_button("Sign Up", use_container_width=True, type="primary")
-                    
-                    # Add some spacing
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    
-                    switch_to_login = st.form_submit_button("Back to Login", use_container_width=True)
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        signup_button = st.form_submit_button("Sign Up", use_container_width=True, type="primary")
+                    with col2:
+                        switch_to_login = st.form_submit_button("Back to Login", use_container_width=True)
                 
                 st.markdown("</div>", unsafe_allow_html=True)
                 
                 # Handle form submissions
-                if 'signup_form' in st.session_state:
-                    if st.session_state.get('signup_form', False):
-                        if username and email and password and confirm_password:
-                            if password != confirm_password:
-                                st.error("Passwords do not match")
-                            else:
-                                success, message = self.auth_manager.register_user(username, email, password)
-                                if success:
-                                    st.success(message)
-                                    st.session_state.auth_mode = "login"
-                                    st.rerun()
-                                else:
-                                    st.error(message)
+                if signup_button:
+                    if username and email and password and confirm_password:
+                        if password != confirm_password:
+                            st.error("Passwords do not match")
                         else:
-                            st.error("Please fill in all fields")
+                            success, message = self.auth_manager.register_user(username, email, password)
+                            if success:
+                                st.success(f"✅ {message}")
+                                st.info("You can now login with your new account!")
+                                # Clear any form data and switch to login
+                                st.session_state.auth_mode = "login"
+                                # Clear form data by rerunning
+                                st.rerun()
+                            else:
+                                st.error(f"❌ {message}")
+                    else:
+                        st.error("Please fill in all fields")
                 
-                if 'signup_form' in st.session_state and st.session_state.get('switch_to_login', False):
+                if switch_to_login:
                     st.session_state.auth_mode = "login"
                     st.rerun()
     
