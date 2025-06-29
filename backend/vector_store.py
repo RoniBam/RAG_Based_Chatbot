@@ -29,7 +29,6 @@ class VectorStoreManager:
         """Check if the Pinecone index contains any records for the user"""
         try:
             index = self.pc.Index(PINECONE_INDEX)
-            stats = index.describe_index_stats()
             
             if username:
                 # Check if user has any documents
@@ -42,27 +41,34 @@ class VectorStoreManager:
                 )
                 return len(response.get('matches', [])) > 0
             else:
+                stats = index.describe_index_stats()
                 return stats.total_vector_count > 0
         except Exception as e:
             raise Exception(f"Error checking index data: {str(e)}")
     
-    def get_available_files(self):
-        """Get list of available files in the index"""
+    def get_available_files(self, username=None):
+        """Get list of available files in the index for a specific user"""
         try:
-            # Check if we have cached results
-            if hasattr(self, '_cached_files') and self._cached_files is not None:
-                return self._cached_files
-            
             index = self.pc.Index(PINECONE_INDEX)
             
             # Query the index with a dummy vector to get all documents
             dummy_vector = [0.0] * PINECONE_DIMENSION
             
-            response = index.query(
-                vector=dummy_vector,
-                top_k=10000,
-                include_metadata=True
-            )
+            if username:
+                # Filter by username
+                response = index.query(
+                    vector=dummy_vector,
+                    top_k=10000,
+                    include_metadata=True,
+                    filter={METADATA_USERNAME_KEY: {"$eq": username}}
+                )
+            else:
+                # Get all documents
+                response = index.query(
+                    vector=dummy_vector,
+                    top_k=10000,
+                    include_metadata=True
+                )
             
             # Extract unique filenames from metadata
             files = set()
@@ -71,12 +77,7 @@ class VectorStoreManager:
                     if 'metadata' in match and METADATA_FILENAME_KEY in match['metadata']:
                         files.add(match['metadata'][METADATA_FILENAME_KEY])
             
-            file_list = sorted(list(files))
-            
-            # Cache the result
-            self._cached_files = file_list
-            
-            return file_list
+            return sorted(list(files))
         except Exception as e:
             raise Exception(f"Error getting available files: {str(e)}")
     
@@ -122,10 +123,17 @@ class VectorStoreManager:
                 
                 return filtered_docs
             
+            # Create a new retriever class with the filtered function
+            class FilteredRetriever:
+                def __init__(self, original_retriever, filter_func):
+                    self.original_retriever = original_retriever
+                    self.filter_func = filter_func
+                
+                def get_relevant_documents(self, query):
+                    return self.filter_func(query)
+            
             # Replace the retriever with filtered version
-            vectorstore.retriever = type('FilteredRetriever', (), {
-                'get_relevant_documents': filtered_retriever
-            })()
+            vectorstore.retriever = FilteredRetriever(original_retriever, filtered_retriever)
             
             return vectorstore
         except Exception as e:

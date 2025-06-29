@@ -11,7 +11,19 @@ class UploadInterface:
     def render(self):
         """Render the upload interface"""
         st.subheader("Upload New Document")
-        st.write("Upload a PDF file to process and add to the knowledge base")
+        st.write("Upload a PDF file to process and add to your knowledge base")
+        
+        # Get current user information
+        user_data = st.session_state.get("user_data", {})
+        if not user_data:
+            st.error("User information not found. Please login again.")
+            return
+        
+        username = user_data.get("username", "")
+        user_id = user_data.get("id", "")
+        
+        # Display user info
+        st.info(f"📁 Uploading documents for user: **{username}**")
         
         # File uploader
         uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
@@ -28,7 +40,12 @@ class UploadInterface:
                 
                 try:
                     with st.spinner("Processing PDF..."):
-                        chunks = self.document_processor.process_pdf(temp_file_path, uploaded_file.name)
+                        chunks = self.document_processor.process_pdf(
+                            temp_file_path, 
+                            uploaded_file.name, 
+                            username, 
+                            user_id
+                        )
                         st.info(f"Extracted {len(chunks)} chunks from PDF")
                     
                     with st.spinner("Connecting..."):

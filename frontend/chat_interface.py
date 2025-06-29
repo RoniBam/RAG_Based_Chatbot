@@ -12,6 +12,14 @@ class ChatInterface:
         st.subheader("Ask Questions")
         st.write("Ask questions about your uploaded documents")
         
+        # Get current user information
+        user_data = st.session_state.get("user_data", {})
+        if not user_data:
+            st.error("User information not found. Please login again.")
+            return
+        
+        username = user_data.get("username", "")
+        
         # Initialize session state for chat history
         if "chat_history" not in st.session_state:
             st.session_state.chat_history = []
@@ -22,29 +30,25 @@ class ChatInterface:
         if "current_question" not in st.session_state:
             st.session_state.current_question = None
         
-        # Clear cached file list when entering this tab to ensure fresh data
-        if "available_files_cache" in st.session_state:
-            del st.session_state.available_files_cache
-        
-        # Check if index has data
+        # Check if index has data for this user
         try:
-            if not self.vector_store_manager.check_index_has_data():
-                st.warning("No documents have been uploaded yet. Please upload a document first.")
+            if not self.vector_store_manager.check_index_has_data(username):
+                st.warning(f"No documents have been uploaded yet for user '{username}'. Please upload a document first.")
                 return
         except Exception as e:
             st.error(f"Error checking documents: {str(e)}")
             return
         
-        # Get available files
+        # Get available files for this user
         try:
-            available_files = self.vector_store_manager.get_available_files()
+            available_files = self.vector_store_manager.get_available_files(username)
             
             if not available_files:
-                st.warning("No documents found in the database.")
+                st.warning(f"No documents found for user '{username}'.")
                 return
             
             # File selection with no default value
-            st.write("**Select a document to query:**")
+            st.write(f"**Select a document to query (User: {username}):**")
             selected_file = st.selectbox(
                 "Choose a document:",
                 options=[""] + available_files,  # Add empty option at the beginning
@@ -65,9 +69,12 @@ class ChatInterface:
             st.error(f"Error getting available files: {str(e)}")
             return
         
-        # Initialize vectorstore with file filter
+        # Initialize vectorstore with file filter and user filter
         try:
-            vectorstore = self.vector_store_manager.get_vectorstore(filename_filter=selected_file)
+            vectorstore = self.vector_store_manager.get_vectorstore(
+                filename_filter=selected_file, 
+                username=username
+            )
             qa_chain = self.qa_chain.create_qa_chain(vectorstore)
             
             # Create a container for the input and button
@@ -120,6 +127,3 @@ class ChatInterface:
         
         except Exception as e:
             st.error(f"Error initializing chat: {str(e)}")
-
-        # Clear cached file list when entering this tab to ensure fresh data
-        self.vector_store_manager.clear_cache()

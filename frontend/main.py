@@ -4,6 +4,7 @@ from .upload_interface import UploadInterface
 from .auth_interface import AuthInterface
 from .admin_interface import AdminInterface
 from backend.config import *
+from backend.session_manager import SessionManager
 
 # Set page config at the very beginning - this must be the first Streamlit command
 st.set_page_config(
@@ -13,11 +14,8 @@ st.set_page_config(
 )
 
 def main():
-    # Initialize session state
-    if "authenticated" not in st.session_state:
-        st.session_state.authenticated = False
-    if "current_page" not in st.session_state:
-        st.session_state.current_page = "auth"
+    # Initialize session manager
+    session_manager = SessionManager()
     
     # Check for required environment variables
     if not OPENAI_API_KEY:
@@ -28,9 +26,20 @@ def main():
         st.error("Please set your PINECONE_API_KEY in the .env file")
         return
     
+    # Check if user has a valid session
+    if session_manager.is_session_valid():
+        # User is authenticated and session is valid
+        st.session_state.authenticated = True
+        session_manager.update_activity()
+    else:
+        # No valid session, show login
+        st.session_state.authenticated = False
+    
+    # Initialize auth interface
+    auth_interface = AuthInterface()
+    
     # Authentication check - redirect to login if not authenticated
     if not st.session_state.authenticated:
-        auth_interface = AuthInterface()
         auth_interface.render_auth_page()
         return
     
@@ -51,7 +60,6 @@ def main():
                     st.rerun()
         with col3:
             if st.button("🚪 Logout"):
-                auth_interface = AuthInterface()
                 auth_interface.logout()
                 return
     
