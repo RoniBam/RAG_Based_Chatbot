@@ -22,6 +22,10 @@ class ChatInterface:
         if "current_question" not in st.session_state:
             st.session_state.current_question = None
         
+        # Clear cached file list when entering this tab to ensure fresh data
+        if "available_files_cache" in st.session_state:
+            del st.session_state.available_files_cache
+        
         # Check if index has data
         try:
             if not self.vector_store_manager.check_index_has_data():
@@ -53,6 +57,9 @@ class ChatInterface:
             if not selected_file:
                 st.error("⚠️ Please select a document before asking questions.")
                 return
+            
+            # Display selected file
+            st.success(f" Currently querying: **{selected_file}**")
             
         except Exception as e:
             st.error(f"Error getting available files: {str(e)}")
@@ -97,7 +104,10 @@ class ChatInterface:
             
             # Display only the current answer
             if st.session_state.current_answer:
-                st.markdown(st.session_state.current_answer)
+                st.write("---")
+                st.write("**Current Question & Answer:**")
+                st.markdown(f"**Q:** {st.session_state.current_question}")
+                st.markdown(f"**A:** {st.session_state.current_answer}")
                 
                 # Show chat history expander only if there are more than one conversation
                 if len(st.session_state.chat_history) > 1:
@@ -110,3 +120,6 @@ class ChatInterface:
         
         except Exception as e:
             st.error(f"Error initializing chat: {str(e)}")
+
+        # Clear cached file list when entering this tab to ensure fresh data
+        self.vector_store_manager.clear_cache()

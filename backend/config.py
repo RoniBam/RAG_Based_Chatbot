@@ -26,3 +26,5 @@ TEMPERATURE = 0
 # File tracking settings
 METADATA_FILENAME_KEY = "filename"
 METADATA_UPLOAD_TIME_KEY = "upload_time"
+METADATA_USERNAME_KEY = "username"
+METADATA_USER_ID_KEY = "user_id"

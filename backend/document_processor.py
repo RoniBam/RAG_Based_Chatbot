@@ -11,7 +11,7 @@ class DocumentProcessor:
             length_function=len
         )
     
-    def process_pdf(self, file_path, filename):
+    def process_pdf(self, file_path, filename, username, user_id):
         """Process PDF file and return chunks with metadata"""
         try:
             # Load PDF
@@ -29,6 +29,8 @@ class DocumentProcessor:
             for chunk in chunks:
                 chunk.metadata[METADATA_FILENAME_KEY] = filename
                 chunk.metadata[METADATA_UPLOAD_TIME_KEY] = upload_time
+                chunk.metadata[METADATA_USERNAME_KEY] = username
+                chunk.metadata[METADATA_USER_ID_KEY] = user_id
             
             return chunks
         except Exception as e:

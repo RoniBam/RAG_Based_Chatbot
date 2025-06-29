@@ -1,9 +1,12 @@
 import streamlit as st
+import time
 from backend.auth_manager import AuthManager
+from backend.session_manager import SessionManager
 
 class AuthInterface:
     def __init__(self):
         self.auth_manager = AuthManager()
+        self.session_manager = SessionManager()
     
     def render_login(self):
         """Render the login form"""
@@ -19,6 +22,9 @@ class AuthInterface:
         
         with col2:
             with st.container():
+                st.markdown("""
+                <div style='background-color: #f0f2f6; padding: 2rem; border-radius: 10px; border: 1px solid #ddd;'>
+                """, unsafe_allow_html=True)
                 
                 st.subheader("Login")
                 
@@ -33,7 +39,7 @@ class AuthInterface:
                     with col1:
                         login_button = st.form_submit_button("Login", use_container_width=True, type="primary")
                     with col2:
-                        switch_to_signup = st.form_submit_button("Sign up", use_container_width=True)
+                        switch_to_signup = st.form_submit_button("Create Account", use_container_width=True)
                 
                 st.markdown("</div>", unsafe_allow_html=True)
                 
@@ -42,9 +48,8 @@ class AuthInterface:
                     if username and password:
                         success, message, user_data = self.auth_manager.login_user(username, password)
                         if success:
-                            st.session_state.authenticated = True
-                            st.session_state.user_data = user_data
-                            st.session_state.current_page = "main"
+                            # Set user session
+                            self.session_manager.set_user_session(user_data)
                             st.success(message)
                             st.rerun()
                         else:
@@ -52,7 +57,6 @@ class AuthInterface:
                     else:
                         st.error("Please fill in all fields")
                 
-                # Handle switching to signup - this should happen when the button is clicked
                 if switch_to_signup:
                     st.session_state.auth_mode = "signup"
                     st.rerun()
@@ -104,9 +108,7 @@ class AuthInterface:
                             if success:
                                 st.success(f"✅ {message}")
                                 st.info("You can now login with your new account!")
-                                # Clear any form data and switch to login
                                 st.session_state.auth_mode = "login"
-                                # Clear form data by rerunning
                                 st.rerun()
                             else:
                                 st.error(f"❌ {message}")
@@ -139,11 +141,6 @@ class AuthInterface:
     
     def logout(self):
         """Logout the current user"""
-        if "authenticated" in st.session_state:
-            del st.session_state.authenticated
-        if "user_data" in st.session_state:
-            del st.session_state.user_data
-        if "current_page" in st.session_state:
-            del st.session_state.current_page
+        self.session_manager.clear_session()
         st.success("Logged out successfully!")
         st.rerun()
