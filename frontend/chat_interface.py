@@ -30,6 +30,17 @@ class ChatInterface:
         if "current_question" not in st.session_state:
             st.session_state.current_question = None
         
+        # Initialize timestamp for forcing refresh
+        if "file_selector_timestamp" not in st.session_state:
+            st.session_state.file_selector_timestamp = 0
+        
+        # Force refresh if a file was uploaded
+        if st.session_state.get("file_uploaded", False):
+            # Clear the upload flag
+            st.session_state.file_uploaded = False
+            # Increment timestamp to force refresh
+            st.session_state.file_selector_timestamp += 1
+        
         # Check if index has data for this user
         try:
             if not self.vector_store_manager.check_index_has_data(username):
@@ -39,7 +50,7 @@ class ChatInterface:
             st.error(f"Error checking documents: {str(e)}")
             return
         
-        # Get available files for this user
+        # Get available files for this user (this will always fetch fresh data)
         try:
             available_files = self.vector_store_manager.get_available_files(username)
             
@@ -47,12 +58,12 @@ class ChatInterface:
                 st.warning(f"No documents found for user '{username}'.")
                 return
             
-            # File selection with no default value
+            # File selection with no default value - use timestamp to force refresh
             st.write(f"**Select a document to query (User: {username}):**")
             selected_file = st.selectbox(
                 "Choose a document:",
                 options=[""] + available_files,  # Add empty option at the beginning
-                key="file_selector",
+                key=f"file_selector_{st.session_state.file_selector_timestamp}",
                 help="Select the document you want to ask questions about",
                 placeholder="Select a document..."
             )

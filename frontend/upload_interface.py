@@ -22,11 +22,8 @@ class UploadInterface:
         username = user_data.get("username", "")
         user_id = user_data.get("id", "")
         
-        # Display user info
-        st.info(f"📁 Uploading documents for user: **{username}**")
-        
         # File uploader
-        uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
+        uploaded_file = st.file_uploader("Choose a PDF file", type="pdf", key="file_uploader")
         
         if uploaded_file is not None:
             try:
@@ -46,15 +43,22 @@ class UploadInterface:
                             username, 
                             user_id
                         )
-                        st.info(f"Extracted {len(chunks)} chunks from PDF")
                     
                     with st.spinner("Connecting..."):
                         self.vector_store_manager.ensure_index_exists()
                     
-                    with st.spinner("Storing embeddings..."):
+                    with st.spinner("Storing file info..."):
+                        # Store the documents in the vector store
                         self.vector_store_manager.store_documents(chunks)
-                        st.success(f"Successfully processed {len(chunks)} chunks and stored in Pinecone!")
-                        st.info(f"Document '{uploaded_file.name}' is now ready for querying!")
+                        
+                        # Set a flag to indicate successful upload
+                        st.session_state.file_uploaded = True
+                        st.session_state.last_upload_time = st.session_state.get("last_upload_time", 0) + 1
+                        
+                        st.success(f"✅ Document '{uploaded_file.name}' uploaded successfully and is now ready for querying!")
+                        
+                        # Show a message to switch to the chat tab
+                        st.info("Switch to the 'Ask Questions' tab to start querying your document!")
                 
                 except Exception as e:
                     st.error(f"An error occurred: {str(e)}")

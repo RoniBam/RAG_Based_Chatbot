@@ -22,19 +22,13 @@ class AuthInterface:
         
         with col2:
             with st.container():
-                st.markdown("""
-                <div style='background-color: #f0f2f6; padding: 2rem; border-radius: 10px; border: 1px solid #ddd;'>
-                """, unsafe_allow_html=True)
                 
                 st.subheader("Login")
                 
                 with st.form("login_form", clear_on_submit=True):
                     username = st.text_input("Username or Email", placeholder="Enter your username or email")
                     password = st.text_input("Password", type="password", placeholder="Enter your password")
-                    
-                    # Add some spacing
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    
+                      
                     col1, col2 = st.columns(2)
                     with col1:
                         login_button = st.form_submit_button("Login", use_container_width=True, type="primary")
